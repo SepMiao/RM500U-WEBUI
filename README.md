@@ -1,84 +1,86 @@
-# RM500U-WEBUI
+# RM500U.Web
 
-Quectel RM500U 5G 模组的 Web 管理界面，适配 OpenWrt 的 procd 服务和 UCI 配置。
-支持 RM500U-CN、RM500U-CNV、RM500U-EA，目前打包目录仅面向 **x86_64 / musl**。
+## 本分支改动（OpenWrt 适配）
+
+- 提供 OpenWrt package 打包目录，目标为 **x86_64 / musl**；使用对应版本的源码或 SDK，可生成 24.10 的 IPK 或 25.12 的 APK。
+- 改用 **procd** 管理服务，通过 **UCI** 保存配置，支持开机自启和升级后重启服务。
+- 默认访问地址为 `http://路由器IP:5080`，用户名和密码均为 **`admin`**。
+- 新增“服务管理”页面，可修改 WebUI 端口、用户名和密码，保存后自动应用；新密码留空保留原密码。
+- 支持在页面中切换模拟环境与硬件环境，管理账号和端口保持不变。
+- 升级保留配置与数据；正常卸载清理默认配置、数据、备份及自启项，重新安装恢复默认设置。
+- `payload/` 已包含预编译程序、运行时和网页，OpenWrt 打包阶段无需安装 .NET SDK。
+
+本分支的 `Makefile`、`files/` 和 `payload/` 应一起放入 OpenWrt 的 `package/rm500u-web/` 目录。下面保留原项目说明，其中 Linux / Windows 发布命令适用于原应用源码。
+
+---
+
+基于 .NET 10 的 Quectel RM500U 管理程序，内置 Web 管理页面。仅支持 RM500U 系列（RM500U-CN / RM500U-CNV / RM500U-EA），可在 Linux（Debian / Ubuntu / Armbian）和 Windows 上运行。
 
 ## 功能
 
-- 设备状态、信号、小区和流量查看
-- APN、拨号、网络模式与频段设置
-- 短信收发、会话管理和 webhook 转发
-- AT 命令终端、运行日志和模拟环境
-- 在“服务管理”页面修改 WebUI 端口、用户名和密码
+- 自动发现并识别 RM500U 的 AT 串口
+- 设备状态、信号质量、服务小区、QoS（5QI / 签约速率）、温度和流量
+- APN 档案管理、拨号与断开、USB 网络模式（ECM / MBIM / RNDIS / NCM）
+- 拨号模式切换：网卡模式、路由 / NAT、网桥模式
+- 网络制式偏好、频段锁定、邻区查看、小区锁定、双 SIM 切换
+- 短信：PDU 编解码、长短信拼接、按号码会话、直接回复、webhook 转发
+- 原始 AT 终端、设备重启、运行日志
+- 可选 Basic Auth
 
-## 默认访问
+## 运行
 
-| 项目 | 默认值 |
+### Linux
+
+```bash
+# 生成 Linux ARM64 Native AOT 输出（在 Linux ARM64 或 WSL Ubuntu 中执行）
+dotnet publish RM500U.Web.csproj -c Release -p:PublishProfile=native-aot-linux-arm64
+
+# 将 deploy/install.sh 和 publish/native-aot/linux-arm64/ 复制到目标设备后安装
+# AOT 输出目录可以是任意位置，只需通过 --bin-dir 指定。
+sudo ./install.sh --bin-dir ./linux-arm64
+```
+
+也兼容常规 self-contained 发布：
+
+```bash
+# 构建
+dotnet publish RM500U.Web.csproj -c Release -r linux-arm64 --self-contained true -o publish/linux-arm64
+
+# 安装为 systemd 服务（监听 http://0.0.0.0:5080）
+sudo ./deploy/install.sh --bin-dir publish/linux-arm64
+```
+
+`install.sh` 自带 systemd unit 定义，因此独立拷贝时不需要额外复制 `rm500u-web.service`。首次安装会生成 Basic Auth 凭据并只显示一次。x64 设备使用 `linux-x64`。卸载执行 `sudo ./deploy/uninstall.sh`（加 `--purge` 会连同配置和凭据一起删除）。
+
+### Windows
+
+```bash
+dotnet publish RM500U.Web.csproj -c Release -r win-x64 --self-contained true -o publish/win-x64
+```
+
+运行 `publish/win-x64/RM500U.Web.exe`，浏览器访问 `http://127.0.0.1:5080`。
+
+程序自动识别 AT 串口，无需手动配置端口。已实测 ECM、MBIM 模式可在 Windows 使用；Linux 下 ECM 模式实测可用。
+
+### 无硬件时体验
+
+设置环境变量 `RM500U_SIMULATE=true` 后运行，会使用模拟设备，方便在未接入模组时预览界面和接口。
+
+## 配置
+
+配置保存在 `RM500U_DATA_DIR`（Linux 默认 `/var/lib/rm500u-web`，Windows 默认程序目录下 `data/`）。常用环境变量：
+
+| 变量 | 说明 |
 | --- | --- |
-| 地址 | `http://路由器IP:5080` |
-| 用户名 | `admin` |
-| 密码 | `admin` |
+| `RM500U_WEB_USER` / `RM500U_WEB_PASSWORD` | 设置后启用 Basic Auth |
+| `ASPNETCORE_URLS` | 监听地址，默认 `http://0.0.0.0:5080` |
+| `RM500U_DATA_DIR` | 数据目录 |
+| `RM500U_SIMULATE` | `true` 时使用模拟设备 |
 
-登录后可在“服务管理”中修改。新密码留空表示保留原密码。
+Linux systemd 服务从 `/etc/rm500u-web.env` 读取这些变量，修改后 `sudo systemctl restart rm500u-web`。
 
-## 安装
+## 注意事项
 
-将编译好的安装包上传至路由器 `/tmp`，执行对应命令。
-
-OpenWrt 25.12（APK；以下方式允许安装未受信任签名的本地包）：
-
-```sh
-apk add --allow-untrusted /tmp/rm500u-web-*.apk
-```
-
-OpenWrt 24.10（IPK）：
-
-```sh
-opkg install /tmp/rm500u-web_*.ipk
-```
-
-启动服务：
-
-```sh
-/etc/init.d/rm500u-web enable
-/etc/init.d/rm500u-web restart
-```
-
-模组需要先被 OpenWrt 正常识别，串口及 USB 网卡驱动按实际连接模式安装。本项目使用独立 WebUI，不会在 LuCI 中新增功能菜单。
-
-## 编译
-
-在 OpenWrt 源码或 SDK 根目录导入本仓库：
-
-```sh
-git clone https://github.com/SepMiao/RM500U-WEBUI.git package/rm500u-web
-make menuconfig
-```
-
-在 `Network` 中选择 `rm500u-web`，然后编译：
-
-```sh
-make defconfig
-make package/rm500u-web/compile -j1 V=s
-```
-
-产物位于 `bin/packages/` 下。24.10 与 25.12 应分别使用各自版本、目标架构对应的编译环境。
-
-本仓库是 OpenWrt 打包目录，`payload/` 包含预编译程序及网页；打包阶段不需要安装 .NET SDK。若修改后端功能，需要先从应用源码重新发布并更新 `payload/`。
-
-## 配置与卸载
-
-服务配置：`/etc/config/rm500u-web`；程序数据：`/etc/rm500u-web/data`。
-
-```sh
-/etc/init.d/rm500u-web restart   # 重启服务
-logread -e rm500u-web           # 查看日志
-apk del rm500u-web             # OpenWrt 25.12 卸载
-# opkg remove rm500u-web        # OpenWrt 24.10 卸载
-```
-
-当前 r5 打包脚本在正常卸载时清理默认配置和数据，升级时保留设置。自定义的外部数据目录不递归删除。
-
-## 许可证
-
-[AGPL-3.0-only](LICENSE)
+- 不要让 ModemManager 等其他程序同时占用 AT 串口，否则 AT 响应会串线。
+- 页面中的拨号模式、频段、USB 模式等设置由模组固件保存，部分在模块重启后生效。
+- Basic Auth 在纯 HTTP 下不加密，公网使用请置于 HTTPS 反向代理之后。
