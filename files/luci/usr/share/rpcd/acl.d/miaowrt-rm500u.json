@@ -1,0 +1,8 @@
+{
+  "miaowrt-rm500u": {
+    "description": "View RM500U console status",
+    "read": {
+      "ubus": { "miaowrt.rm500u": ["status"] }
+    }
+  }
+}

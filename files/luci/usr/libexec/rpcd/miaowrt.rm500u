@@ -1,0 +1,23 @@
+#!/bin/sh
+
+case "$1:$2" in
+	list:) echo '{"status":{}}' ;;
+	call:status)
+		. /lib/functions.sh
+		. /usr/share/libubox/jshn.sh
+		config_load rm500u-web || exit 1
+		config_get listen main listen 'http://0.0.0.0:5080'
+		config_get_bool enabled main enabled 1
+		config_get_bool simulate main simulate 0
+		running=0
+		/etc/init.d/rm500u-web running && running=1
+
+		json_init
+		json_add_boolean running "$running"
+		json_add_boolean enabled "$enabled"
+		json_add_boolean simulate "$simulate"
+		json_add_string listen "$listen"
+		json_dump
+		;;
+	*) exit 1 ;;
+esac

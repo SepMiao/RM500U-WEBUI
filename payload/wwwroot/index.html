@@ -28,8 +28,8 @@
     apply(pref);
   })();
   </script>
-  <link rel="stylesheet" href="/app.css?v=20261126-11">
-  <script src="/app.js?v=20261126-11" defer></script>
+  <link rel="stylesheet" href="/app.css?v=20261129-2">
+  <script src="/app.js?v=20261129-2" defer></script>
 </head>
 <body>
   <svg class="icon-sprite" aria-hidden="true">
@@ -75,7 +75,7 @@
         <dl>
           <div><dt>端口</dt><dd id="sideAtPort">--</dd></div>
           <div><dt>接口</dt><dd id="sideInterface">--</dd></div>
-          <div><dt>版本</dt><dd>1.0.0-r5</dd></div>
+          <div><dt>版本</dt><dd id="sideVersion">--</dd></div>
         </dl>
       </div>
     </aside>
@@ -468,25 +468,35 @@
 
         <section class="page" data-page-panel="admin">
           <div class="section-heading"><div><span>ADMINISTRATION</span><h2>服务管理</h2></div></div>
-          <form class="panel form-panel" id="adminForm">
-            <div class="form-section">
-              <div class="form-section-title"><span>01</span><div><h3>访问地址</h3><p>保存后重新启动 Web 服务，并跳转到新端口。</p></div></div>
-              <div class="form-grid three-columns">
-                <label class="field"><span>WebUI 端口</span><input name="port" type="number" min="1" max="65535" step="1" required value="5080"></label>
-                <label class="field"><span>管理用户名</span><input name="username" autocomplete="username" maxlength="64" required></label>
+          <div class="panel form-panel">
+            <form class="form-section" id="adminPortForm">
+              <div class="form-section-title"><div><h3>访问端口</h3><p>保存后将跳转到新端口。</p></div></div>
+              <div>
+                <label class="field"><span>WebUI 端口</span><input name="port" type="number" min="1" max="65535" step="1" required></label>
+                <div class="admin-actions"><button class="button button-primary" type="submit" disabled>保存端口</button></div>
               </div>
-            </div>
-            <div class="form-section form-section-last">
-              <div class="form-section-title"><span>02</span><div><h3>登录凭据</h3><p>输入当前密码以确认修改。新密码留空表示保留，填写时至少 8 个字符。</p></div></div>
-              <div class="form-grid three-columns">
-                <label class="field"><span>当前密码</span><input name="currentPassword" type="password" autocomplete="current-password" maxlength="256"></label>
-                <label class="field"><span>新密码（可选）</span><input name="password" type="password" autocomplete="new-password" minlength="8" maxlength="256"></label>
-                <label class="field"><span>确认新密码</span><input name="confirmPassword" type="password" autocomplete="new-password" minlength="8" maxlength="256"></label>
+            </form>
+            <form class="form-section form-section-last" id="adminAccountForm">
+              <div class="form-section-title"><div><h3>登录账号</h3><p>只修改一项时，另一项留空。新密码至少 8 个字符。</p></div></div>
+              <div>
+                <fieldset class="admin-credentials" id="adminVerify">
+                  <legend>验证</legend>
+                  <label class="field"><span>旧用户名</span><input name="currentUsername" autocomplete="section-old username" maxlength="64" required></label>
+                  <label class="field"><span>旧密码</span><input name="currentPassword" type="password" autocomplete="section-old current-password" maxlength="256" required></label>
+                </fieldset>
+                <fieldset class="admin-credentials">
+                  <legend>修改</legend>
+                  <label class="field"><span>新用户名</span><input name="username" autocomplete="section-new username" maxlength="64"></label>
+                  <label class="field"><span>新密码</span><input name="password" type="password" autocomplete="section-new new-password" minlength="8" maxlength="256"></label>
+                </fieldset>
+                <div class="admin-actions"><button class="button button-primary" type="submit" disabled>保存账号</button></div>
               </div>
-              <div class="admin-actions"><p id="adminMessage" role="status" aria-live="polite">正在读取服务设置…</p><button class="button button-primary" type="submit" disabled><svg><use href="#i-save"/></svg><span>保存并应用</span></button></div>
+            </form>
+            <div class="admin-feedback">
+              <p id="adminMessage" role="status" aria-live="polite">正在读取服务设置…</p>
               <a id="adminReconnect" hidden>打开新的管理地址</a>
             </div>
-          </form>
+          </div>
         </section>
 
       </main>

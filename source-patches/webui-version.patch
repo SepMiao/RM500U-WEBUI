@@ -1,0 +1,19 @@
+--- a/Program.cs
++++ b/Program.cs
+@@ -163,10 +163,15 @@
+ app.UseDefaultFiles();
+ app.UseStaticFiles();
+ 
++var versionFile = Path.Combine(AppContext.BaseDirectory, "package-version");
++var version = File.Exists(versionFile)
++    ? File.ReadAllText(versionFile).Trim()
++    : typeof(HealthResponse).Assembly.GetName().Version!.ToString(3);
++
+ app.MapGet("/api/health", (RuntimeOptions runtime) => Results.Ok(new HealthResponse(
+     "ok",
+     "rm500u-web",
+-    "1.0.0-r5",
++    version,
+     runtime.UseSimulation,
+     DateTimeOffset.UtcNow)));
+ 

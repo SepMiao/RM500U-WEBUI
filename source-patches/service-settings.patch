@@ -1,0 +1,85 @@
+--- a/Models/WebAdminModels.cs
++++ b/Models/WebAdminModels.cs
+@@ -2,5 +2,5 @@
+ 
+ public sealed record WebAdminConfiguration(string ListenUrl, string Username, string Password);
+ public sealed record WebAdminSettingsResponse(int Port, string Username, bool AuthenticationEnabled, string Storage);
+-public sealed record WebAdminSettingsRequest(int Port, string Username, string? Password, string? CurrentPassword);
++public sealed record WebAdminSettingsRequest(int? Port, string? Username, string? Password, string? CurrentUsername, string? CurrentPassword);
+ public sealed record WebAdminApplyResponse(int Port, bool Restarting);
+--- a/Services/WebAdminSettingsStore.cs
++++ b/Services/WebAdminSettingsStore.cs
+@@ -63,26 +63,39 @@
+ 
+     public async Task SaveAsync(WebAdminSettingsRequest request, CancellationToken cancellationToken)
+     {
+-        if (request.Port is < 1 or > 65535)
++        var uri = GetListenUri();
++        var port = request.Port ?? uri.Port;
++        if (port is < 1 or > 65535)
+             throw new ArgumentException("端口必须为 1–65535 的整数。");
+-        var username = request.Username?.Trim() ?? "";
+-        if (username.Length is < 1 or > 64 || username.Any(c => char.IsControl(c) || c == ':'))
+-            throw new ArgumentException("用户名须为 1–64 个字符，不能包含冒号或控制字符。");
+-        if (AuthenticationEnabled && !FixedTimeEquals(request.CurrentPassword ?? "", _current.Password))
+-            throw new ArgumentException("当前密码不正确，未修改设置。");
+-        var password = string.IsNullOrEmpty(request.Password) ? _current.Password : request.Password;
+-        if ((!string.IsNullOrEmpty(request.Password) || !AuthenticationEnabled) &&
+-            (password.Length is < 8 or > 256 || password.Any(char.IsControl)))
+-            throw new ArgumentException("新密码须为 8–256 个字符，不能包含控制字符。");
+ 
+-        var uri = GetListenUri();
+-        if (request.Port != uri.Port)
++        var username = _current.Username;
++        var password = _current.Password;
++        if (request.Username is not null || request.Password is not null)
++        {
++            if (AuthenticationEnabled && !Authenticate(request.CurrentUsername ?? "", request.CurrentPassword ?? ""))
++                throw new ArgumentException("旧用户名或旧密码不正确，设置未修改。");
++
++            if (request.Username is not null)
++                username = request.Username.Trim();
++            if (username.Length is < 1 or > 64 || username.Any(c => char.IsControl(c) || c == ':'))
++                throw new ArgumentException("用户名须为 1–64 个字符，不能包含冒号或控制字符。");
++
++            if (!string.IsNullOrEmpty(request.Password))
++                password = request.Password;
++            if ((!string.IsNullOrEmpty(request.Password) || !AuthenticationEnabled) &&
++                (password.Length is < 8 or > 256 || password.Any(char.IsControl)))
++                throw new ArgumentException("新密码须为 8–256 个字符，不能包含控制字符。");
++        }
++        if (port == uri.Port && username == _current.Username && password == _current.Password)
++            throw new ArgumentException("设置没有变化。");
++
++        if (port != uri.Port)
+         {
+             var address = IPAddress.TryParse(uri.Host.Trim('[', ']'), out var parsed) ? parsed :
+                 uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ? IPAddress.Loopback : IPAddress.Any;
+             try
+             {
+-                var probe = new TcpListener(address, request.Port);
++                var probe = new TcpListener(address, port);
+                 try { probe.Start(); }
+                 finally { probe.Stop(); }
+             }
+@@ -91,7 +104,8 @@
+                 throw new ArgumentException("该端口已被占用或不可用，请选择其他端口。");
+             }
+         }
+-        var listenUrl = new UriBuilder(uri) { Port = request.Port }.Uri.GetLeftPart(UriPartial.Authority);
++        var listenUrl = port == uri.Port ? _current.ListenUrl :
++            new UriBuilder(uri) { Port = port }.Uri.GetLeftPart(UriPartial.Authority);
+         var next = new WebAdminConfiguration(listenUrl, username, password);
+         if (OperatingSystem.IsLinux() && _useUci)
+             await WriteUciAsync(next, cancellationToken);
+--- a/Program.cs
++++ b/Program.cs
+@@ -31,7 +31,7 @@
+         {
+             await webAdmin.SaveAsync(settings, cancellationToken);
+             context.Response.OnCompleted(() => { app.Lifetime.StopApplication(); return Task.CompletedTask; });
+-            return Results.Ok(new WebAdminApplyResponse(settings.Port, true));
++            return Results.Ok(new WebAdminApplyResponse(webAdmin.GetSettings().Port, true));
+         }
+         catch
+         {

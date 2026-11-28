@@ -1,0 +1,13 @@
+{
+  "admin/miaowrt": {
+    "title": "MiaoWRT",
+    "order": 65,
+    "action": { "type": "firstchild" }
+  },
+  "admin/miaowrt/rm500u": {
+    "title": "RM500U 控制台",
+    "order": 30,
+    "action": { "type": "view", "path": "miaowrt/rm500u" },
+    "depends": { "acl": ["miaowrt-rm500u"] }
+  }
+}

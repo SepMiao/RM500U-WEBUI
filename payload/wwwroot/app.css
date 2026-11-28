@@ -649,7 +649,12 @@ body.is-busy::before { position: fixed; top: 0; right: 0; left: 0; z-index: 100;
   .toast-region { right: 11px; bottom: 11px; width: calc(100vw - 22px); }
 }
 
-.admin-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 24px; }
-.admin-actions p { flex: 1 1 240px; margin: 0; color: oklch(var(--muted-foreground)); font-size: 13px; line-height: 1.6; }
+.admin-credentials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; padding: 0; margin: 0; border: 0; }
+.admin-credentials[hidden] { display: none; }
+.admin-credentials + .admin-credentials { margin-top: 20px; }
+.admin-credentials legend { margin-bottom: 8px; padding: 0; font-weight: 600; }
+.admin-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.admin-feedback { padding: 0 24px 24px; }
+.admin-feedback p { margin: 0; color: oklch(var(--muted-foreground)); font-size: 13px; line-height: 1.6; }
 #adminReconnect { display: inline-block; margin-top: 12px; overflow-wrap: anywhere; }
 #adminReconnect[hidden] { display: none; }

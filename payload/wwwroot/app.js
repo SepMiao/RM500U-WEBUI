@@ -254,6 +254,9 @@ async function init() {
   bindActions();
   initCustomSelects();
   initTheme();
+  api("/api/health", { track: false })
+    .then(health => { $("#sideVersion").textContent = health.version; })
+    .catch(showLoadError);
   const initialPage = location.hash.slice(1);
   navigate(pageMeta[initialPage] ? initialPage : "dashboard", false);
   const results = await Promise.allSettled([loadConfig(), loadCandidates(), refreshStatus(true, true)]);
@@ -293,7 +296,12 @@ async function ensurePageData(page) {
 }
 
 function bindForms() {
-  $("#adminForm")?.addEventListener("submit", event => { event.preventDefault(); saveAdminSettings().catch(showActionError); });
+  for (const form of [$("#adminPortForm"), $("#adminAccountForm")]) {
+    form.addEventListener("submit", event => {
+      event.preventDefault();
+      saveAdminSettings(form).catch(showActionError);
+    });
+  }
   $("#configForm")?.addEventListener("submit", event => { event.preventDefault(); saveConfig(); });
   $("#smsForm")?.addEventListener("submit", sendSms);
   $("#smsReplyForm")?.addEventListener("submit", sendReply);
@@ -880,49 +888,56 @@ async function loadLogs() { state.logs = await api("/api/logs"); renderLogs(); }
 function renderLogs() { const filter = $("#logLevelFilter")?.value || "all"; const logs = state.logs.filter(entry => filter === "all" || normalizeLogLevel(entry.level) === filter); $("#logsBody").innerHTML = logs.length ? logs.map(entry => `<tr><td>${escapeHtml(formatDateTime(entry.timestamp, true))}</td><td><span class="log-level ${normalizeLogLevel(entry.level)}">${escapeHtml(normalizeLogLevel(entry.level))}</span></td><td>${escapeHtml(value(entry.source))}</td><td>${escapeHtml(value(entry.message))}</td><td>${escapeHtml(value(entry.detail))}</td></tr>`).join("") : '<tr class="empty-row"><td colspan="5">没有日志</td></tr>'; }
 async function clearLogs() { if (!window.confirm("清空运行日志？")) return; await api("/api/logs", { method: "DELETE" }); state.logs = []; renderLogs(); toast("日志已清空", "", "success"); }
 
+function setAdminButtonsDisabled(disabled) {
+  for (const form of [$("#adminPortForm"), $("#adminAccountForm")])
+    form.querySelector('button[type="submit"]').disabled = disabled;
+}
+
 async function loadAdminSettings() {
   if (state.adminSaving) return;
   const settings = await api("/api/admin/settings");
   if (!settings || !Number.isInteger(settings.port) || typeof settings.username !== "string" || typeof settings.authenticationEnabled !== "boolean") {
     state.admin = null;
-    $("#adminForm button[type=submit]").disabled = true;
-    $("#adminMessage").textContent = "当前服务未提供有效的管理接口。升级后请重启 rm500u-web 服务，并强制刷新页面。";
-    throw new Error("管理接口与页面不匹配，请重启服务后刷新页面。");
+    setAdminButtonsDisabled(true);
+    $("#adminMessage").textContent = "管理接口与页面不匹配，请重启服务后刷新页面。";
+    throw new Error($("#adminMessage").textContent);
   }
   state.admin = settings;
-  const form = $("#adminForm");
-  form.elements.port.value = settings.port;
-  form.elements.username.value = settings.username;
-  form.elements.currentPassword.required = settings.authenticationEnabled;
-  form.elements.currentPassword.disabled = !settings.authenticationEnabled;
-  form.elements.password.required = !settings.authenticationEnabled;
-  form.querySelector('button[type="submit"]').disabled = false;
+  $("#adminPortForm").elements.port.value = settings.port;
+  const account = $("#adminAccountForm");
+  $("#adminVerify").disabled = $("#adminVerify").hidden = !settings.authenticationEnabled;
+  account.elements.username.required = !settings.authenticationEnabled && !settings.username;
+  account.elements.password.required = !settings.authenticationEnabled;
+  setAdminButtonsDisabled(false);
   $("#adminMessage").textContent = settings.authenticationEnabled
-    ? "设置已加载。修改后浏览器可能要求使用新账号重新登录。"
-    : "当前未启用登录验证，请设置用户名和至少 8 位密码。";
+    ? "" : "当前未启用登录验证，请设置登录账号。";
 }
 
-async function saveAdminSettings() {
+async function saveAdminSettings(form) {
   if (state.adminSaving || !state.admin) return;
-  const form = $("#adminForm");
-  if (form.elements.password.value !== form.elements.confirmPassword.value)
-    throw new Error("两次输入的新密码不一致。");
+  const portOnly = form.id === "adminPortForm";
+  const fields = form.elements;
+  const body = {};
+  if (portOnly) {
+    body.port = Number(fields.port.value);
+  } else {
+    if (fields.username.value.trim()) body.username = fields.username.value.trim();
+    if (fields.password.value) body.password = fields.password.value;
+    if (!body.username && !body.password)
+      throw new Error("请填写新用户名或新密码。");
+    if (state.admin.authenticationEnabled) {
+      body.currentUsername = fields.currentUsername.value;
+      body.currentPassword = fields.currentPassword.value;
+    }
+  }
   state.adminSaving = true;
-  const button = form.querySelector('button[type="submit"]');
-  button.disabled = true;
+  setAdminButtonsDisabled(true);
   try {
-    const result = await api("/api/admin/settings", { method: "POST", body: {
-      port: Number(form.elements.port.value),
-      username: form.elements.username.value.trim(),
-      currentPassword: form.elements.currentPassword.value,
-      password: form.elements.password.value
-    } });
+    const result = await api("/api/admin/settings", { method: "POST", body });
     clearInterval(state.pollTimer);
     clearInterval(state.smsPollTimer);
     clearTimeout(state.smsRefreshTimer);
-    form.elements.currentPassword.value = "";
-    form.elements.password.value = "";
-    form.elements.confirmPassword.value = "";
+    $("#adminAccountForm").reset();
     const next = new URL(location.href);
     next.port = String(result.port);
     next.hash = "admin";
@@ -930,14 +945,16 @@ async function saveAdminSettings() {
     link.href = next.href;
     link.textContent = `打开管理页面：${next.origin}`;
     link.hidden = false;
-    $("#adminMessage").textContent = "设置已保存，正在重新启动服务。请使用新账号登录；若未自动跳转，请点击下方地址。";
+    $("#adminMessage").textContent = portOnly
+      ? "端口已保存，正在跳转到新的管理地址。"
+      : "账号已保存，请使用更新后的凭据重新登录。";
     setTimeout(() => {
       if (next.origin === location.origin) location.reload();
       else location.assign(next.href);
     }, 1800);
   } catch (error) {
     state.adminSaving = false;
-    button.disabled = false;
+    setAdminButtonsDisabled(false);
     $("#adminMessage").textContent = error.message;
     throw error;
   }
